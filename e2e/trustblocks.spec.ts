@@ -130,3 +130,17 @@ test("a Trustblocks share link opens with its clause and lifecycle, ready to sim
   await detail(page).getByRole("tab", { name: "State after" }).click();
   await expect(detail(page)).toContainText('"status": "APPROVED"');
 });
+
+test("the Text step's preview shows the agreement as drafted, and saves it as a PDF", async ({ page }) => {
+  await page.getByRole("button", { name: "Start with Contractor Pay Request" }).click();
+  await page.locator(".nd-step-label", { hasText: "Text" }).click();
+  await page.getByRole("button", { name: /Preview/ }).first().click();
+
+  const preview = page.getByLabel("Preview", { exact: true });
+  await expect(preview).toContainText("CONTRACTOR PAY REQUEST");
+  await expect(preview).toContainText("PROJECT: STR-27");
+
+  const download = page.waitForEvent("download");
+  await page.locator(".nd-preview").getByRole("button", { name: /PDF/ }).click();
+  expect((await download).suggestedFilename()).toBe("agreement.pdf");
+});

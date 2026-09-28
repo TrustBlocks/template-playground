@@ -87,6 +87,11 @@ export const PREVIEW = {
   title: "Preview",
   liveBadge: "live",
   pdf: "↓ PDF",
+  pdfFailed: "Couldn't make the PDF — see the console",
+  /** While the store has not yet drafted the agreement. */
+  drafting: "Drafting the agreement…",
+  /** Above the reason, when the text, model and data do not draft. */
+  notDrafted: "The agreement can't be drafted yet:",
   close: "Close preview",
 } as const;
 
