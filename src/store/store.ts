@@ -13,6 +13,34 @@ import { SAMPLES, Sample } from "../samples";
  */
 const DEFAULT_SAMPLE: Sample =
   SAMPLES.find((s) => s.NAME === "Trustblocks · Street Resurfacing Pay Application") ?? SAMPLES[0];
+/** "ManagerEmployment" for a share link's data: its root type's name. */
+const linkedName = (data: string): string => {
+  try {
+    const fqn = String((JSON.parse(data) as { $class?: unknown }).$class ?? "");
+    return fqn.slice(fqn.lastIndexOf(".") + 1) || "Shared template";
+  } catch {
+    return "Shared template";
+  }
+};
+
+/**
+ * The request a share link's contract starts with: the event its lifecycle
+ * begins with, in the model's namespace -- or an empty one to fill in.
+ */
+const firstRequest = (modelCto: string, lifecycleJson: string | undefined): string => {
+  try {
+    const ns = modelCto.match(/^\s*namespace\s+(\S+)/m)?.[1];
+    const lifecycle = JSON.parse(lifecycleJson || "null") as
+      | { transitions?: Array<{ event: string; from: string[] }> }
+      | null;
+    const first = lifecycle?.transitions?.find((t) => t.from.length === 0);
+    if (ns && first) return JSON.stringify({ $class: `${ns}.${first.event}` }, null, 2);
+  } catch {
+    // fall through
+  }
+  return '{\n  "$class": ""\n}';
+};
+
 const sampleLifecycle = (sample: Sample | undefined): string =>
   sample?.LIFECYCLE ? JSON.stringify(sample.LIFECYCLE, null, 2) : "";
 import { compress, decompress } from "../utils/compression/compression";
@@ -730,6 +758,14 @@ const useAppStore = create<AppState>()(
             const hasClause = Boolean(logicTs && logicTs.trim().length > 0);
             const hasLogic = hasClause || Boolean(lifecycleJson && lifecycleJson.trim().length > 0);
             set(() => ({
+              // The link's own template, named for its root type; nothing of
+              // the sample open before it carries over.
+              sampleName: linkedName(data),
+              requestJson: firstRequest(modelCto, lifecycleJson),
+              executionState: "",
+              executionEvents: "",
+              executionResponse: "",
+              executionHistory: [],
               templateMarkdown,
               editorValue: templateMarkdown,
               modelCto,
