@@ -1,0 +1,94 @@
+# Trustblocks' Template Playground on GitHub Pages.
+#
+# The logic runtime is built from source: trustblocks-templates at the commit
+# trustblocks.json pins, `bb logic-bundle` there, and scripts/sync-trustblocks.mjs
+# here -- which also regenerates the samples, and the build fails if the
+# committed src/samples/trustblocks.generated.ts is not what that commit gives.
+#
+# Pull requests are built and tested; pushes to `trustblocks` are deployed.
+name: pages
+
+on:
+  push:
+    branches: [trustblocks]
+  pull_request:
+    branches: [trustblocks]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The pinned trustblocks-templates commit
+        id: templates
+        run: echo "ref=$(jq -r .templatesRef trustblocks.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: TrustBlocks/trustblocks-templates
+          ref: ${{ steps.templates.outputs.ref }}
+          path: trustblocks-templates
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: DeLaGuardo/setup-clojure@13.2
+        with:
+          cli: latest
+          bb: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: templates-deps-${{ hashFiles('trustblocks-templates/deps.edn') }}
+
+      - name: Build the logic runtime (trustblocks-logic.js)
+        working-directory: trustblocks-templates
+        run: bb logic-bundle
+
+      - name: Bring in the runtime and the samples
+        run: |
+          node scripts/sync-trustblocks.mjs trustblocks-templates
+          git diff --exit-code src/samples/trustblocks.generated.ts \
+            || { echo "::error::src/samples/trustblocks.generated.ts is not what trustblocks.json's templatesRef gives -- run scripts/sync-trustblocks.mjs and commit it"; exit 1; }
+
+      - run: npm ci --no-audit --no-fund
+      - run: npx vitest run
+
+      - name: Build for GitHub Pages
+        run: |
+          PLAYGROUND_BASE="/${{ github.event.repository.name }}/" NODE_OPTIONS=--max-old-space-size=8192 npm run build
+          # A client-side route loaded directly: GitHub Pages serves 404.html.
+          cp dist/index.html dist/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

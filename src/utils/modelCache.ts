@@ -10,6 +10,7 @@ import signatureCto from "../models/bundled/accordproject.signature.cto?raw";
 import docusignConnectCto from "../models/bundled/docusign.connect.cto?raw";
 
 import type { ModelManager } from "@accordproject/concerto-core";
+import { TRUSTBLOCKS_BUNDLED_MODELS } from "../samples/trustblocks.generated";
 
 interface BundledModel {
   namespace: string;
@@ -58,6 +59,10 @@ export const BUNDLED_MODELS: BundledModel[] = [
     fileName: "@models.accordproject.org.docusign.connect@0.4.0.cto",
     source: docusignConnectCto,
   },
+  // Trustblocks' shared models (the municipal agreement base, attestations)
+  // and the Accord models its templates import that are not above -- see
+  // scripts/sync-trustblocks.mjs.
+  ...TRUSTBLOCKS_BUNDLED_MODELS,
 ];
 
 /**

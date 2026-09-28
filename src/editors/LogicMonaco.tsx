@@ -10,9 +10,9 @@ const MonacoEditor = lazy(() =>
 );
 
 /**
- * The Monaco TypeScript editor for contract logic, bound to the app store:
- * configures the virtual TS compiler with the `TemplateLogic` declarations,
- * writes edits to `editorLogicTs` and surfaces compilation errors as markers.
+ * The Monaco editor for contract logic -- a Trustblocks clause, in Clojure --
+ * bound to the app store: writes edits to `editorLogicTs` (upstream's name;
+ * the source is Clojure) and surfaces the runtime's check as markers.
  * Chrome-free, so both the legacy LogicEditor and the design-v2 Logic step
  * can wrap it in their own header and status bar.
  */
@@ -28,31 +28,11 @@ export default function LogicMonaco() {
 
   const themeName = useThemeName();
 
-  // Configure TS compiler options once Monaco is ready
+  // Clojure needs no compiler set up: the runtime's own check (the store's
+  // compileLogic) is what reports a problem.
   useEffect(() => {
     if (!monaco || compilerConfigured.current) return;
     compilerConfigured.current = true;
-
-    monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-      target: monaco.languages.typescript.ScriptTarget.ES2020,
-      module: monaco.languages.typescript.ModuleKind.ESNext,
-      strict: false,
-      strictNullChecks: true,
-      noEmit: true,
-      allowNonTsExtensions: true,
-    });
-
-    monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
-      noSemanticValidation: true,
-      noSyntaxValidation: false,
-    });
-
-    monaco.languages.typescript.typescriptDefaults.addExtraLib(`
-      declare abstract class TemplateLogic<T> {
-        abstract init(data: any): Promise<any>;
-        abstract trigger(data: any, request: any, state: any): Promise<any>;
-      }
-    `, 'file:///node_modules/@types/accordproject/index.d.ts');
   }, [monaco]);
 
   const editorOptions: monacoNS.editor.IStandaloneEditorConstructionOptions = useMemo(
@@ -90,7 +70,7 @@ export default function LogicMonaco() {
   useEffect(() => {
     if (!monaco || !compilerConfigured.current) return;
     const models = monaco.editor.getModels();
-    const model = models.find((m) => m.uri.path === '/logic.ts');
+    const model = models.find((m) => m.uri.path === '/clause.clj');
     if (model) {
       const markers = !isDirty
         ? (compilationErrors || []).map((e) => ({
@@ -110,8 +90,8 @@ export default function LogicMonaco() {
     <div className="editorwrapper h-full w-full" style={{ position: 'relative', minHeight: 0 }}>
       <Suspense fallback={<div className="logic-editor-loading">Loading editor...</div>}>
         <MonacoEditor
-          path="logic.ts"
-          language="typescript"
+          path="clause.clj"
+          language="clojure"
           height="100%"
           value={editorLogicTs}
           theme={themeName}

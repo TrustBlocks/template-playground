@@ -1,7 +1,7 @@
 import { render, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom";
-import { SANDBOX_READY, EXECUTION_RESULT } from "../../constants/sandbox";
+import { SANDBOX_READY, LOAD_RUNTIME, RUNTIME_LOADED, EXECUTION_RESULT } from "../../constants/sandbox";
 import useAppStore from "../../store/store";
 import { sandboxResolvers } from "../../store/sandboxResolvers";
 import SandboxFrame from "../../components/SandboxFrame";
@@ -33,17 +33,25 @@ describe("SandboxFrame", () => {
     expect(iframe).toHaveClass("sandbox-frame-hidden");
   });
 
-  it("should handle sandbox-ready message from iframe", () => {
-    render(<SandboxFrame />);
+  it("on sandbox-ready, sends the iframe the logic runtime; ready once it is loaded", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("/* runtime */") });
+    vi.stubGlobal("fetch", fetchMock);
+    const { container } = render(<SandboxFrame />);
+    const iframe = container.querySelector("iframe") as HTMLIFrameElement;
+    const postMessage = vi.fn();
+    Object.defineProperty(iframe, "contentWindow", { value: { postMessage } });
 
-    // Simulate the sandbox-ready message from a null-origin iframe
-    const readyEvent = new MessageEvent("message", {
-      data: { type: SANDBOX_READY },
-      origin: "null",
-    });
-    window.dispatchEvent(readyEvent);
+    window.dispatchEvent(new MessageEvent("message", { data: { type: SANDBOX_READY }, origin: "null" }));
+    await vi.waitFor(() => expect(postMessage).toHaveBeenCalled());
 
+    expect(fetchMock).toHaveBeenCalledWith("/trustblocks-logic.js");
+    expect(postMessage).toHaveBeenCalledWith({ type: LOAD_RUNTIME, source: "/* runtime */" }, "*");
+    // Not ready until the runtime is in the worker
+    expect(useAppStore.getState().isSandboxReady).toBe(false);
+
+    window.dispatchEvent(new MessageEvent("message", { data: { type: RUNTIME_LOADED }, origin: "null" }));
     expect(useAppStore.getState().isSandboxReady).toBe(true);
+    vi.unstubAllGlobals();
   });
 
   it("should ignore messages from non-null origins", () => {

@@ -6,7 +6,7 @@ import LogicEditor from '../../editors/LogicEditor';
 import { registerEditor, unregisterEditor } from '../../utils/editorNavigation';
 
 const mockSetModelMarkers = vi.fn();
-const mockGetModels = vi.fn().mockReturnValue([{ uri: { path: '/logic.ts' } }]);
+const mockGetModels = vi.fn().mockReturnValue([{ uri: { path: '/clause.clj' } }]);
 const mockMonaco = {
   editor: {
     getModels: mockGetModels,
@@ -146,7 +146,7 @@ describe('LogicEditor', () => {
     });
 
     expect(mockSetModelMarkers).toHaveBeenCalledWith(
-      { uri: { path: '/logic.ts' } },
+      { uri: { path: '/clause.clj' } },
       'logic',
       [{
         severity: 8,
@@ -167,7 +167,7 @@ describe('LogicEditor', () => {
     });
 
     expect(mockSetModelMarkers).toHaveBeenCalledWith(
-      { uri: { path: '/logic.ts' } },
+      { uri: { path: '/clause.clj' } },
       'logic',
       []
     );
@@ -187,7 +187,7 @@ describe('LogicEditor', () => {
     });
 
     expect(mockSetModelMarkers).toHaveBeenCalledWith(
-      { uri: { path: '/logic.ts' } },
+      { uri: { path: '/clause.clj' } },
       'logic',
       []
     );

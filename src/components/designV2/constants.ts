@@ -14,7 +14,8 @@ export const URLS = {
   concertoSite: "https://concerto.accordproject.org/",
   concertoSpec: "https://concerto.accordproject.org/docs/category/specification",
   templateMark: "https://github.com/accordproject/markdown-transform/blob/main/packages/markdown-template/README.md",
-  logicDocs: "https://github.com/accordproject/template-engine/blob/main/README.md#logic",
+  // A clause here is Clojure, run by Trustblocks' clause runtime.
+  logicDocs: "https://github.com/TrustBlocks/trustblocks-templates/blob/main/docs/runtime.md",
   concertoIntro: "https://concerto.accordproject.org/docs/intro",
   /** Docs site: what a template is made of (text, model, logic). "How it works" on the hero opens it. */
   templateDocs: "https://docs.accordproject.org/docs/accordproject-template/",
@@ -38,7 +39,7 @@ export const RAIL = {
 } as const;
 
 export const HEADER = {
-  eyebrow: "ACCORD PROJECT · TEMPLATE PLAYGROUND",
+  eyebrow: "TRUSTBLOCKS · TEMPLATE PLAYGROUND",
   docs: "docs ↗",
   help: "Help",
   helpMenuLabel: "Help",
@@ -90,13 +91,16 @@ export const PREVIEW = {
 } as const;
 
 export const WELCOME = {
-  /** Accessible name of the Accord Project wordmark in the hero. */
-  logoAlt: "Accord Project",
-  logoSrc: "/APLogo.png",
-  titleLine: "The agreement layer",
-  titleAccent: "for agentic commerce.",
-  subtitleLine1: "Write enforceable terms that humans read and software executes.",
-  subtitleLine2: "Build, test and deploy a template in your browser.",
+  /**
+   * Accord Project's wordmark: this is Trustblocks' fork of Accord's
+   * playground (github.com/TrustBlocks/template-playground), and says so.
+   */
+  logoAlt: "Built on Accord Project",
+  logoSrc: `${import.meta.env.BASE_URL}APLogo.png`,
+  titleLine: "Contracts a town can read",
+  titleAccent: "and software can run.",
+  subtitleLine1: "Trustblocks' fork of Accord Project's Template Playground: the logic is Clojure, run exactly as Trustblocks runs it.",
+  subtitleLine2: "Build and test a template in your browser — every lifecycle step, every refusal.",
   start: "Start building",
   /** Opens URLS.templateDocs in a new tab. */
   howItWorks: "How it works ↗",
@@ -141,42 +145,47 @@ export interface StartSample {
   demonstrates: readonly string[];
 }
 
-/** Gallery cards shown on the Start step. Every card's sample ships logic, so every card walks the same steps. */
+/**
+ * Gallery cards shown on the Start step: Trustblocks' templates, from
+ * trustblocks-templates (src/samples/trustblocks.generated.ts). Every card's
+ * sample runs -- a clause, a lifecycle, or both -- so every card walks the
+ * same steps.
+ */
 export const START_SAMPLES: readonly StartSample[] = [
   {
-    name: "Counter Contract",
-    sampleName: "Counter Contract (with Logic)",
+    name: "Contractor Pay Request",
+    sampleName: "Trustblocks · Street Resurfacing Pay Application",
     accent: "teal",
     art: "counter",
-    tagline: "Stateful logic — start here.",
+    tagline: "A lifecycle, certified at every step — start here.",
     demonstrates: [
-      "Remembers state between requests",
-      "init() and trigger()",
-      "Enforces a maximum",
+      "Received, inspected, certified, approved, paid",
+      "Checks the Contractor's figures to the cent",
+      "Refuses what the engineer has not approved",
     ],
   },
   {
-    name: "Employment Offer",
-    sampleName: "Employment Offer Letter",
+    name: "Town Manager Contract",
+    sampleName: "Trustblocks · Manager Employment Contract",
     accent: "amber",
     art: "offer",
-    tagline: "Text and data, one answer.",
+    tagline: "Approved by the Council, certified by the Clerk.",
     demonstrates: [
-      "Variables filled from the model",
-      "Accept or decline, once",
-      "Emits an event",
+      "One approval, certified by the Town Clerk",
+      "Attestations only after it",
+      "An effective date that may be retroactive",
     ],
   },
   {
-    name: "Non-disclosure",
-    sampleName: "Non-Disclosure Agreement",
+    name: "Vendor Information Form",
+    sampleName: "Trustblocks · Street Resurfacing Vendor Form",
     accent: "blue",
     art: "nda",
-    tagline: "Rules that depend on dates.",
+    tagline: "A lifecycle and no clause at all.",
     demonstrates: [
-      "Checks dates against the term",
-      "Counts disclosures in state",
-      "Records every event",
+      "Received by the Finance Director",
+      "Then given a vendor number",
+      "Nothing else to decide",
     ],
   },
 ];
@@ -190,17 +199,20 @@ export const sampleNameFor = (selectedTemplate: string | null): string | undefin
   return START_SAMPLES.find((card) => card.name === selectedTemplate)?.sampleName;
 };
 
-/** Step "Logic": logic.ts in the TypeScript editor, compiled through the store on Apply & Compile. */
+/**
+ * Step "Logic": the clause, clause.clj, in Clojure -- checked by Trustblocks'
+ * clause runtime on Apply & Compile, and run by it in Simulate.
+ */
 export const LOGIC = {
   icon: "ƒ",
   title: "Add logic",
   subtitle:
-    "Three parts, one job: the types a request carries, the starting state, and what a request actually does.",
+    "One expression, one job: given the contract, a request, the state and the time, say what follows — or refuse.",
   paneLabel: "Logic",
-  file: "logic.ts",
-  badge: "TypeScript",
+  file: "clause.clj",
+  badge: "Clojure",
   copy: "⧉ copy",
-  copied: "logic.ts copied",
+  copied: "clause.clj copied",
   copyFailed: "Couldn't copy — the clipboard is not available here",
   doneCount: (done: number, total: number) => `${done} of ${total} done`,
   chipsLabel: "Progress",
@@ -216,30 +228,31 @@ export const LOGIC = {
       action: "model.cto ‣",
     },
     pair: {
-      label: "init() & trigger()",
-      hint: "set the starting state, then respond to requests",
+      label: "The clause",
+      hint: "answer each request, or refuse it by throwing",
     },
   },
   /** Same five states, same order, as the legacy logic panel's badge. */
   status: {
     dirty: "unsaved changes",
-    compiling: "compiling…",
-    failed: "compilation failed",
-    compiled: "compiled",
-    notCompiled: "not compiled yet",
-    empty: "nothing to compile",
+    compiling: "checking…",
+    failed: "refused by the vocabulary",
+    compiled: "checked",
+    notCompiled: "not checked yet",
+    empty: "no clause",
   },
   help: {
     checklistTitle: "BEFORE SIMULATE",
     why: {
       note:
-        "Logic is optional — templates without it still render. With it, the contract responds to requests and keeps state between them.",
-      links: [{ label: "Writing contract logic", href: URLS.logicDocs }],
+        "Logic is optional — templates without it still render. With it, the contract answers requests and keeps state between them. It runs in Trustblocks' clause runtime: no clock, no I/O, so the same request always gets the same answer — here and in Trustblocks.",
+      links: [{ label: "The clause runtime", href: URLS.logicDocs }],
     },
     how: [
-      "Request and Response types define one run's in and out.",
-      "init() returns the starting state, once.",
-      "trigger() reads state + request and returns a response.",
+      "data, request, state and now are bound; state is nil before the first event.",
+      "Return {:response …} and, when the state changes, {:state …}.",
+      "Refuse by throwing: (throw (ex-info \"Not yet approved\" {})).",
+      "A lifecycle.json decides which events may happen, and who certifies them.",
     ],
   },
 } as const;
@@ -359,7 +372,7 @@ export const SIMULATE = {
   /** "3 runs · 2 ok · 1 failed" — the pill next to the title. */
   stats: (runs: number, ok: number, failed: number) =>
     `${runs} ${runs === 1 ? "run" : "runs"} · ${ok} ok · ${failed} failed`,
-  noRuns: "Nothing has happened yet — start the contract to get its opening state.",
+  noRuns: "Nothing has happened yet — start the contract, then send its first event.",
   init: "▶ Start the contract",
   newRequest: "Send a message to the contract",
   json: "json",
@@ -378,24 +391,24 @@ export const SIMULATE = {
   /** "Events (2)" */
   eventsTab: (count: number) => `Events (${count})`,
   /** "thrown in trigger() — state was left unchanged" */
-  thrownIn: (method: string) => `thrown in ${method}() — state was left unchanged`,
+  thrownIn: (method: string) => `refused${method === "init" ? " at the start" : ""} — state was left unchanged`,
   /** Second line of the error pane when the message never reached the logic. */
   notSent: "the message was not sent — fix the JSON and send again",
-  openTrigger: "open trigger() ↗",
+  openTrigger: "open the clause ↗",
   stateUnchanged: "This run failed, so the state is the same as before it.",
-  noState: "No state — init() did not return one.",
+  noState: "No state yet — the lifecycle begins with the first event.",
   rerun: "↻ re-run",
   noSelection: "Pick a run on the left to see what was sent and what came back.",
   status: { ok: "✓ ok", failed: "✕ failed" },
   summary: {
-    init: "contract initialised",
-    initFailed: "init() threw",
-    triggerFailed: "trigger() threw",
+    init: "contract started",
+    initFailed: "could not start",
+    triggerFailed: "refused",
     invalidRequest: "message is not valid JSON",
   },
   blocked: {
     title: "Simulate can’t run yet",
-    body: "Your logic hasn’t compiled — trigger() is still a stub, so there is nothing to send a message to. Finish the Logic step and hit Apply & Compile.",
+    body: "The clause hasn’t passed the runtime’s check yet, so there is nothing to send a message to. Finish the Logic step and hit Apply & Compile.",
     stay: "Stay here",
     jump: "Jump back to Logic",
   },

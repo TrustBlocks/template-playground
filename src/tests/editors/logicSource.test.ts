@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+// The bundle's text, as the sandbox receives it.
+import runtimeSource from '../../../public/trustblocks-logic.js?raw';
 import {
   DEFAULT_LOGIC_BOILERPLATE,
   describeLogicModel,
@@ -50,28 +52,67 @@ describe('describeLogicModel', () => {
   });
 });
 
+/*
+ * Trustblocks' clause runtime -- the same file the sandbox runs, brought in by
+ * scripts/sync-trustblocks.mjs -- so a skeleton is held to what the runtime
+ * accepts, not to how it reads.
+ */
+type Runtime = {
+  check(logic: string): string | null;
+  trigger(opts: object): { ok: boolean; error?: string; response?: Record<string, unknown>; state?: Record<string, unknown> };
+};
+const runtime = (): Runtime => {
+  const g = globalThis as unknown as { TrustblocksLogic?: Runtime };
+  if (!g.TrustblocksLogic) {
+    new Function(runtimeSource)();
+  }
+  return g.TrustblocksLogic!;
+};
+
 describe('scaffoldFromModel', () => {
-  it('builds init() and trigger() with the model’s $class names and required fields', () => {
+  it('answers the request transaction with the response, and merges the state asset', () => {
     const src = scaffoldFromModel(describeLogicModel(counter.MODEL));
-    expect(src).toContain("import type { ICounterContract, ICounterRequest } from './org.acme.counter@1.0.0';");
-    expect(src).toContain('class ContractLogic extends TemplateLogic<any>');
-    expect(src).toContain('async init(data: ICounterContract)');
-    expect(src).toContain("$class: 'org.acme.counter@1.0.0.CounterState'");
-    expect(src).toContain("stateId: 'contract-state'");
-    expect(src).toContain('count: 0,');
-    expect(src).toContain("owner: '',");
-    expect(src).toContain('async trigger(data: ICounterContract, request: ICounterRequest, state: any)');
-    expect(src).toContain("$class: 'org.acme.counter@1.0.0.CounterResponse'");
-    expect(src).toContain('$timestamp: new Date(),');
-    expect(src).toContain("message: '',");
-    expect(src).toContain('newCount: 0,');
-    expect(src).toContain('export default ContractLogic;');
+    expect(src).toContain('(= event "org.acme.counter@1.0.0.CounterRequest")');
+    expect(src).toContain('{:response {"$class" "org.acme.counter@1.0.0.CounterResponse"');
+    expect(src).toContain('"$timestamp" now');
+    expect(src).toContain('"message" ""');
+    expect(src).toContain('"newCount" 0');
+    expect(src).toContain(':state (merge state');
+    expect(src).toContain('{"$class" "org.acme.counter@1.0.0.CounterState"');
+    expect(src).toContain('"stateId" (get data "stateId")');
+    expect(src).toContain('"count" 0');
+    expect(src).toContain('"owner" ""');
+    expect(src).toContain('(throw (ex-info (str "This contract does not answer " event) {}))');
   });
 
-  it('marks non-primitive fields with their type', () => {
+  it('gives each primitive a first value of its type', () => {
     const src = scaffoldFromModel(describeLogicModel(latePayment.MODEL));
-    expect(src).toContain('penalty: 0,');
-    expect(src).toContain('sellerMayTerminate: false,');
+    expect(src).toContain('"penalty" 0.0');
+    expect(src).toContain('"sellerMayTerminate" false');
+  });
+
+  it('is a clause the runtime accepts, and runs', () => {
+    const src = scaffoldFromModel(describeLogicModel(counter.MODEL));
+    expect(runtime().check(src)).toBeNull();
+    const step = runtime().trigger({
+      logic: src,
+      lifecycle: null,
+      model: counter.MODEL,
+      data: counter.DATA,
+      request: { $class: 'org.acme.counter@1.0.0.CounterRequest', increment: 1 },
+      state: null,
+      now: '2026-07-24T15:00:00.000Z',
+    });
+    expect(step.ok, step.error).toBe(true);
+    expect(step.response).toMatchObject({
+      $class: 'org.acme.counter@1.0.0.CounterResponse',
+      $timestamp: '2026-07-24T15:00:00.000Z',
+    });
+    expect(step.state).toMatchObject({ $class: 'org.acme.counter@1.0.0.CounterState' });
+  });
+
+  it('so is the generic boilerplate', () => {
+    expect(runtime().check(DEFAULT_LOGIC_BOILERPLATE)).toBeNull();
   });
 
   it('falls back to the generic boilerplate without request/response', () => {

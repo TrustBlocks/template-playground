@@ -153,6 +153,7 @@ const RunDetail = ({ run, busy, onRerun, onOpenLogic }: RunDetailProps) => {
 /** Step 5: Simulate — runs list, request editor and the selected run's request / result. */
 const SimulateView = () => {
   const compiledLogicJs = useAppStore((s) => s.compiledLogicJs);
+  const lifecycleJson = useAppStore((s) => s.lifecycleJson);
   const history = useAppStore((s) => s.executionHistory);
   const executionState = useAppStore((s) => s.executionState);
   const isExecuting = useAppStore((s) => s.isExecuting);
@@ -167,7 +168,9 @@ const SimulateView = () => {
 
   const [blockedDismissed, setBlockedDismissed] = useState(false);
 
-  const compiled = Boolean(compiledLogicJs);
+  // Runnable once the clause has passed the runtime's check -- or, for a
+  // template with a lifecycle and no clause (the vendor form), at once.
+  const compiled = Boolean(compiledLogicJs) || lifecycleJson.trim() !== "";
   const stats = runStats(history);
   const selected = history.find((run) => run.id === selectedRunId) ?? history[history.length - 1] ?? null;
   const initialised = Boolean(executionState);

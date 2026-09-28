@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useAppStore from '../../store/store';
 
 describe('useAppStore - Logic State', () => {
@@ -53,23 +53,23 @@ describe('useAppStore - Logic State', () => {
       expect(useAppStore.getState().logicTs).toBe(''); // unchanged
     });
 
-    it('setLogicTs should sync editor and trigger compilation stub', async () => {
+    it('setLogicTs should sync the editor and run the runtime\'s check', async () => {
       const store = useAppStore.getState();
-      
-      // Dirty the state to ensure the compilation stub cleans it up
+
+      // Dirty the state to ensure the check starts clean
       useAppStore.setState({
-        compiledLogicJs: 'old_js_code',
+        compiledLogicJs: 'old clause',
         compilationErrors: [{ message: 'Old error' }],
+        isSandboxReady: true,
+        executeInSandbox: vi.fn().mockResolvedValue(null),
       });
 
-      await store.setLogicTs('const y = 2;');
-      
+      await store.setLogicTs('(let [x 1] {})');
+
       const newState = useAppStore.getState();
-      expect(newState.logicTs).toBe('const y = 2;');
-      expect(newState.editorLogicTs).toBe('const y = 2;');
-      
-      // Verify that compileLogic stub was called and cleared state
-      expect(newState.compiledLogicJs).toBeNull();
+      expect(newState.logicTs).toBe('(let [x 1] {})');
+      expect(newState.editorLogicTs).toBe('(let [x 1] {})');
+      expect(newState.compiledLogicJs).toBe('(let [x 1] {})');
       expect(newState.compilationErrors).toEqual([]);
       expect(newState.isCompiling).toBe(false);
     });

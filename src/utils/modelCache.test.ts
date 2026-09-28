@@ -3,7 +3,7 @@ import { ModelManager } from "@accordproject/concerto-core";
 import { loadBundledModels } from "./modelCache";
 
 describe("loadBundledModels", () => {
-  it("preloads the standard Accord Project namespaces", () => {
+  it("preloads the standard Accord Project namespaces, and Trustblocks' shared models", () => {
     const mm = new ModelManager();
     loadBundledModels(mm);
     const namespaces = (mm as unknown as {
@@ -22,6 +22,10 @@ describe("loadBundledModels", () => {
         "org.accordproject.runtime@0.2.0",
         "org.accordproject.signature@0.3.0",
         "org.accordproject.time@0.3.0",
+        // From trustblocks-templates (scripts/sync-trustblocks.mjs)
+        "com.trustblocks.attestation@1.0.0",
+        "com.trustblocks.municipal.agreement@1.0.0",
+        "org.accordproject.usa.state@0.3.0",
       ].sort()
     );
   });

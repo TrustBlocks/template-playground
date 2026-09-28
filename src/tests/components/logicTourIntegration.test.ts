@@ -92,7 +92,7 @@ describe("Tour integration", () => {
     localStorage.removeItem("hasVisitedLogicTour");
     const showSpy = vi.spyOn(tour, "show").mockImplementation(() => tour as any);
 
-    await useAppStore.getState().loadSample("Counter Contract (with Logic)");
+    await useAppStore.getState().loadSample("Trustblocks · Street Resurfacing Pay Application");
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     expect(localStorage.getItem("hasVisitedLogicTour")).toBe("true");

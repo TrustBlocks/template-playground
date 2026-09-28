@@ -1,39 +1,22 @@
 /**
- * What logic.ts is written against, read from model.cto: the @template
+ * What a clause is written against, read from model.cto: the @template
  * concept, the request/response transactions and the state asset. From
- * those, a logic skeleton with the right $class names and fields; and the
- * "what to commit on Apply & Compile" rule shared by the legacy LogicEditor
- * and the design-v2 footer.
+ * those, a clause skeleton -- Clojure, run by Trustblocks' clause runtime
+ * (trustblocks-templates' runtime/) -- with the right $class names and
+ * fields; and the "what to commit on Apply & Compile" rule shared by the
+ * legacy LogicEditor and the design-v2 footer.
  */
 import { ModelManager } from "@accordproject/concerto-core";
 
 /** Generic fallback when model.cto declares no request/response transactions. */
-export const DEFAULT_LOGIC_BOILERPLATE = `// Write your contract logic here.
-
-class ContractLogic extends TemplateLogic<any> {
-
-  async init(data: any) {
-    return {
-      state: {
-        $identifier: 'contract-state',
-      },
-    };
-  }
-
-  async trigger(data: any, request: any, state: any) {
-    return {
-      result: {
-        $class: 'org.example.Response',
-        $timestamp: new Date(),
-      },
-      state: {
-        ...state,
-      },
-    };
-  }
-}
-
-export default ContractLogic;
+export const DEFAULT_LOGIC_BOILERPLATE = `;; The clause: one expression, evaluated with data (the contract), request,
+;; state (nil before the first event) and now (an ISO-8601 string) bound.
+;; It returns {:response ...} and, when the state changes, {:state ...};
+;; it refuses by throwing. No clock, no I/O -- the same inputs, the same answer.
+(let [event (get request "$class")]
+  (cond
+    :else {:response {"$class" "org.example.Response"
+                      "$timestamp" now}}))
 `;
 
 export interface LogicField {
@@ -134,19 +117,19 @@ export const describeLogicModel = (modelCto: string): LogicModel | null => {
 };
 
 const PRIMITIVE_PLACEHOLDER: Record<string, string> = {
-  String: "''",
+  String: '""',
   Integer: "0",
   Long: "0",
-  Double: "0",
+  Double: "0.0",
   Boolean: "false",
-  DateTime: "new Date()",
+  DateTime: "now",
 };
 
-/** A first value for a field, with the type as a comment when it is not a primitive. */
+/** A first value for a field, as a map entry, with the type as a comment when it is not a primitive. */
 const fieldLine = (field: LogicField, indent: string): string => {
-  const value = field.isArray ? "[]" : (PRIMITIVE_PLACEHOLDER[field.type] ?? "undefined");
-  const note = field.isArray || field.type in PRIMITIVE_PLACEHOLDER ? "" : ` // ${field.type}`;
-  return `${indent}${field.name}: ${value},${note}`;
+  const value = field.isArray ? "[]" : (PRIMITIVE_PLACEHOLDER[field.type] ?? "nil");
+  const note = field.isArray || field.type in PRIMITIVE_PLACEHOLDER ? "" : ` ; ${field.type}`;
+  return `${indent}"${field.name}" ${value}${note}`;
 };
 
 const fieldLines = (type: LogicType | undefined, indent: string, skip: string[] = []): string[] =>
@@ -155,62 +138,41 @@ const fieldLines = (type: LogicType | undefined, indent: string, skip: string[] 
     .map((f) => fieldLine(f, indent));
 
 /**
- * A logic skeleton for the model: init() returning the state asset and
- * trigger() returning the response transaction, each with its $class and
- * its required fields filled with first values. The engine compiles
- * logic.ts next to a generated `./<namespace>` module that exports an
- * I<Name> interface per declaration, so data and request are typed through
- * an `import type` (erased on emit — the store runs the JS with new Function).
- * Falls back to the generic boilerplate when the model has no
+ * A clause skeleton for the model: answering the request transaction with
+ * the response transaction, its $class and required fields filled with
+ * first values, and -- when the model has a state asset -- a state to
+ * merge. Falls back to the generic boilerplate when the model has no
  * request/response transactions.
  */
 export const scaffoldFromModel = (model: LogicModel | null): string => {
   if (!model?.request || !model.response) return DEFAULT_LOGIC_BOILERPLATE;
-  const { template, request, response, state } = model;
-  const dataType = template ? `I${template.name}` : "any";
-  const imported = [template, request].filter((t): t is LogicType => Boolean(t)).map((t) => `I${t.name}`);
-
+  const { request, response, state } = model;
   const stateLines = state
     ? [
-        `        $class: '${state.fqn}',`,
-        `        $identifier: 'contract-state',`,
-        ...(state.identifier ? [`        ${state.identifier}: 'contract-state',`] : []),
-        ...fieldLines(state, "        ", state.identifier ? [state.identifier] : []),
+        ``,
+        `     ;; What changes in the state -- merged over the state as it was.`,
+        `     :state (merge state`,
+        `                   {"$class" "${state.fqn}"`,
+        ...(state.identifier ? [`                    "${state.identifier}" (get data "${state.identifier}")`] : []),
+        ...fieldLines(state, "                    ", state.identifier ? [state.identifier] : []),
+        `                    })`,
       ]
-    : [`        $identifier: 'contract-state',`];
+    : [];
 
-  return `// Logic for ${model.namespace}. The model's types come from the generated module below.
-import type { ${imported.join(", ")} } from './${model.namespace}';
+  return `;; The clause for ${model.namespace}: one expression, evaluated with data
+;; (the contract), request, state (nil before the first event) and now bound.
+;; It refuses by throwing, e.g. (throw (ex-info "Not yet approved" {})).
+(let [event (get request "$class")]
+  (cond
+    (= event "${request.fqn}")
+    {:response {"$class" "${response.fqn}"
+                "$timestamp" now
+${fieldLines(response, "                ").join("\n")}
+                }${stateLines.length ? "" : "}"}
+${stateLines.join("\n")}${stateLines.length ? "}" : ""}
 
-class ContractLogic extends TemplateLogic<any> {
-
-  // Runs once: the contract's starting state.
-  async init(data: ${dataType}) {
-    return {
-      state: {
-${stateLines.join("\n")}
-      },
-      events: [],
-    };
-  }
-
-  // Runs per request: read data, request and state; return the response and the new state.
-  async trigger(data: ${dataType}, request: I${request.name}, state: any) {
-    return {
-      result: {
-        $class: '${response.fqn}',
-        $timestamp: new Date(),
-${fieldLines(response, "        ").join("\n")}
-      },
-      state: {
-        ...state,
-      },
-      events: [],
-    };
-  }
-}
-
-export default ContractLogic;
+    :else
+    (throw (ex-info (str "This contract does not answer " event) {}))))
 `;
 };
 

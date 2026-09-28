@@ -5,9 +5,14 @@ import "../styles/components/SandboxFrame.css";
 
 import {
   SANDBOX_READY,
+  LOAD_RUNTIME,
+  RUNTIME_LOADED,
   EXECUTION_RESULT,
   SandboxMessage,
 } from "../constants/sandbox";
+
+/** Trustblocks' clause runtime, built from trustblocks-templates (scripts/sync-trustblocks.mjs). */
+const RUNTIME_URL = `${import.meta.env.BASE_URL}trustblocks-logic.js`;
 
 /**
  * SandboxFrame renders a hidden, sandboxed iframe that serves as the
@@ -18,8 +23,10 @@ import {
  * a null origin — isolating it from the parent's DOM, storage, and memory.
  *
  * This component:
- * 1. Mounts the iframe and registers its reference with the Zustand store
- * 2. Listens for postMessage events from the iframe
+ * 1. Mounts the iframe and, when it is ready, sends it the logic runtime --
+ *    trustblocks-logic.js, fetched here and passed as text, since the
+ *    iframe may load no script by URL
+ * 2. Registers the iframe with the Zustand store once the runtime is loaded
  * 3. Routes execution results to pending promise resolvers via the module-scoped resolver map
  */
 export default function SandboxFrame() {
@@ -42,6 +49,20 @@ export default function SandboxFrame() {
 
       switch (msg.type) {
         case SANDBOX_READY:
+          fetch(RUNTIME_URL)
+            .then((response) => {
+              if (!response.ok) throw new Error(`${RUNTIME_URL}: ${response.status}`);
+              return response.text();
+            })
+            .then((source) => {
+              iframeRef.current?.contentWindow?.postMessage({ type: LOAD_RUNTIME, source }, "*");
+            })
+            .catch((error: unknown) => {
+              console.error("The logic runtime could not be loaded:", error);
+            });
+          break;
+
+        case RUNTIME_LOADED:
           if (iframeRef.current) {
             setSandboxRef(iframeRef.current);
           }
@@ -86,7 +107,7 @@ export default function SandboxFrame() {
   return (
     <iframe
       ref={iframeRef}
-      src="/logic-handler.html"
+      src={`${import.meta.env.BASE_URL}logic-handler.html`}
       sandbox="allow-scripts"
       className="sandbox-frame-hidden"
       title="Logic Sandbox"
