@@ -31,6 +31,15 @@ describe('useAppStore - compileLogic', () => {
     expect(state.isCompiling).toBe(false);
   });
 
+  it('an accepted clause comes back from the sandbox as {} (a null result), and is checked', async () => {
+    useAppStore.setState({ executeInSandbox: vi.fn().mockResolvedValue({}) });
+
+    await useAppStore.getState().compileLogic();
+
+    expect(useAppStore.getState().compiledLogicJs).toBe('(let [event (get request "$class")] {})');
+    expect(useAppStore.getState().compilationErrors).toEqual([]);
+  });
+
   it('a clause reaching outside the vocabulary is refused, with why', async () => {
     useAppStore.setState({
       logicTs: '(rand)',
