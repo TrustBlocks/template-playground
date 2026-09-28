@@ -121,8 +121,10 @@ test("a Trustblocks share link opens with its clause and lifecycle, ready to sim
   const start = page.getByRole("button", { name: /Start the contract/ });
   await expect(start).toBeEnabled({ timeout: 20_000 });
   await start.click();
-
-  await send(page, { $class: "com.trustblocks.municipal.employment@1.0.0.BoardApprovalRequest" });
+  // Named for the link's own contract, and ready with its lifecycle's first event.
+  await expect(page.getByText("ManagerEmployment").first()).toBeVisible();
+  await expect(page.locator(".nd-sim-request-editor")).toContainText("BoardApprovalRequest");
+  await page.getByRole("button", { name: /Send/ }).click();
   await expect(stats(page)).toContainText("2 ok");
   await expect(detail(page)).toContainText("CERTIFY_MINUTES");
   await detail(page).getByRole("tab", { name: "State after" }).click();
