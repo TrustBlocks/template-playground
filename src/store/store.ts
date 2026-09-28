@@ -246,6 +246,11 @@ interface AppState {
    */
   simulateNow: string;
   setSimulateNow: (iso: string) => void;
+  /**
+   * The page opened a share link (#data=...): what it loaded is the
+   * template, and "Start building" must not replace it with a card's.
+   */
+  openedFromLink: boolean;
   setRequestJson: (json: string) => void;
 
   /**
@@ -471,6 +476,7 @@ const useAppStore = create<AppState>()(
         setLifecycleJson: (json: string) => set({ lifecycleJson: json }),
         simulateNow: "",
         setSimulateNow: (iso: string) => set({ simulateNow: iso }),
+        openedFromLink: false,
 
         toggleModelCollapse: () =>
           set((state) => ({ isModelCollapsed: !state.isModelCollapsed })),
@@ -720,7 +726,9 @@ const useAppStore = create<AppState>()(
             if (!templateMarkdown || !modelCto || !data) {
               throw new Error("Invalid share link data");
             }
-            const hasLogic = Boolean(logicTs && logicTs.trim().length > 0);
+            // A lifecycle alone runs too (the vendor form).
+            const hasClause = Boolean(logicTs && logicTs.trim().length > 0);
+            const hasLogic = hasClause || Boolean(lifecycleJson && lifecycleJson.trim().length > 0);
             set(() => ({
               templateMarkdown,
               editorValue: templateMarkdown,
@@ -733,6 +741,7 @@ const useAppStore = create<AppState>()(
               logicTs: logicTs || "",
               editorLogicTs: logicTs || "",
               lifecycleJson: lifecycleJson || "",
+              openedFromLink: true,
               compiledLogicJs: null,
               compilationErrors: [],
               isCompiling: false,
@@ -743,8 +752,10 @@ const useAppStore = create<AppState>()(
               savePanelState({ ...get(), isLogicPanelVisible: true });
             }
             await get().rebuild();
-            if (hasLogic) {
-              await get().compileLogic();
+            // Not awaited: the check waits for the sandbox, which the page
+            // renders only once loading is done.
+            if (hasClause) {
+              void get().compileLogic();
             }
           } catch (error) {
             set(() => ({
@@ -885,7 +896,11 @@ const useAppStore = create<AppState>()(
           }
           try {
             await get().whenSandboxReady();
-            const why = (await get().executeInSandbox("", "check", [logicTs])) as string | null;
+            // The runtime answers null for a clause it accepts, or why it
+            // refuses one; executeInSandbox hands a null result back as {},
+            // so only a string is a refusal.
+            const answer = await get().executeInSandbox("", "check", [logicTs]);
+            const why = typeof answer === "string" ? answer : null;
             if (why) {
               set({
                 isCompiling: false,

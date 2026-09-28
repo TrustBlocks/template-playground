@@ -59,9 +59,14 @@ const DesignV2Layout = () => {
     return cleanup;
   }, [isDesignV2Enabled]);
 
-  /** "Start building": enter the flow on a template — the first card unless one was already picked. */
+  const openedFromLink = useAppStore((s) => s.openedFromLink);
+
+  /**
+   * "Start building": enter the flow on a template — the first card unless
+   * one was already picked, or a share link already loaded one.
+   */
   const handleStart = () => {
-    if (!selectedTemplate) pick(DEFAULT_TEMPLATE);
+    if (!selectedTemplate && !openedFromLink) pick(DEFAULT_TEMPLATE);
     start();
   };
 

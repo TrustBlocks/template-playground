@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import LZString from "lz-string";
+import { TRUSTBLOCKS_SAMPLES } from "../src/samples/trustblocks.generated";
 
 /*
  * Trustblocks' templates, run in the browser by Trustblocks' own clause
@@ -55,6 +57,14 @@ const detail = (page: Page) => page.locator(".nd-sim-detail");
 /** The runs badge: "3 runs · 3 ok · 0 failed". */
 const stats = (page: Page) => page.locator(".nd-sim-head .nd-badge");
 
+test("the clause is checked by the runtime", async ({ page }) => {
+  await page.getByRole("button", { name: "Start with Contractor Pay Request" }).click();
+  await page.locator(".nd-step-label", { hasText: "Logic" }).click();
+  // The runtime's own check: "checked", not "refused by the vocabulary".
+  await expect(page.getByText("checked", { exact: true }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("refused by the vocabulary")).toHaveCount(0);
+});
+
 test("a pay request: refused out of order, then received and inspected", async ({ page }) => {
   await openSimulate(page, "Contractor Pay Request");
 
@@ -88,4 +98,33 @@ test("the vendor form: a lifecycle and no clause", async ({ page }) => {
   await expect(stats(page)).toContainText("3 ok");
   await detail(page).getByRole("tab", { name: "State after" }).click();
   await expect(detail(page)).toContainText('"status": "VENDOR_NUMBER_ASSIGNED"');
+});
+
+test("a Trustblocks share link opens with its clause and lifecycle, ready to simulate", async ({ page }) => {
+  // What Trustblocks' "Open in Template Playground" link carries
+  // (com.trustblocks.model.playground/template-status).
+  const manager = TRUSTBLOCKS_SAMPLES.find((s) => s.NAME === "Trustblocks · Manager Employment Contract")!;
+  const data = LZString.compressToEncodedURIComponent(JSON.stringify({
+    templateMarkdown: manager.TEMPLATE,
+    modelCto: manager.MODEL,
+    data: JSON.stringify(manager.DATA),
+    agreementHtml: "",
+    logicTs: manager.LOGIC,
+    lifecycleJson: JSON.stringify(manager.LIFECYCLE),
+  }));
+  // Only the hash differs from the page already open, so load it afresh --
+  // as following a link does.
+  await page.goto(`/#data=${data}`);
+  await page.reload();
+  await page.getByText("Start building").click();
+  await page.locator(".nd-step-label", { hasText: "Simulate" }).click();
+  const start = page.getByRole("button", { name: /Start the contract/ });
+  await expect(start).toBeEnabled({ timeout: 20_000 });
+  await start.click();
+
+  await send(page, { $class: "com.trustblocks.municipal.employment@1.0.0.BoardApprovalRequest" });
+  await expect(stats(page)).toContainText("2 ok");
+  await expect(detail(page)).toContainText("CERTIFY_MINUTES");
+  await detail(page).getByRole("tab", { name: "State after" }).click();
+  await expect(detail(page)).toContainText('"status": "APPROVED"');
 });
