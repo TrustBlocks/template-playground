@@ -54,13 +54,13 @@ describe('LogicView', () => {
   const pane = () => within(screen.getByRole('region', { name: LOGIC.paneLabel }));
   const rail = () => within(screen.getByRole('complementary'));
 
-  it('shows logic.ts in the TypeScript editor under the progress header and the two job rows', async () => {
+  it('shows clause.clj in the Clojure editor under the progress header and the two job rows', async () => {
     render(<LogicView />);
     expect(pane().getByText(LOGIC.file)).toBeInTheDocument();
     expect(pane().getByText(LOGIC.badge)).toBeInTheDocument();
     expect(pane().getByText(LOGIC.chips.types.label)).toBeInTheDocument();
     expect(pane().getByText(LOGIC.chips.pair.label)).toBeInTheDocument();
-    expect(await pane().findByTestId('monaco-typescript')).toBeInTheDocument();
+    expect(await pane().findByTestId('monaco-clojure')).toBeInTheDocument();
   });
 
   it('counts the types row as done when model.cto declares request/response, and init/trigger once compiled', () => {
@@ -113,7 +113,7 @@ describe('LogicView', () => {
     useAppStore.setState({ editorLogicTs: '', logicTs: '' });
     render(<LogicView />);
     expect(useAppStore.getState().editorLogicTs).toBe(scaffoldFromModel(describeLogicModel(counter.MODEL)));
-    expect(useAppStore.getState().editorLogicTs).toContain("$class: 'org.acme.counter@1.0.0.CounterResponse'");
+    expect(useAppStore.getState().editorLogicTs).toContain('"$class" "org.acme.counter@1.0.0.CounterResponse"');
   });
 
   it('falls back to the generic skeleton when the model has no request/response', () => {

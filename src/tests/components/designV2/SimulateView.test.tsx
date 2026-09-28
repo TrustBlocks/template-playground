@@ -44,7 +44,8 @@ describe('SimulateView', () => {
 
   describe('when the logic is not compiled', () => {
     beforeEach(() => {
-      useAppStore.setState({ compiledLogicJs: null, executionHistory: [], executionState: '' });
+      // No clause checked and no lifecycle: nothing to run.
+      useAppStore.setState({ compiledLogicJs: null, lifecycleJson: '', executionHistory: [], executionState: '' });
     });
 
     it('shows the blocked dialog and "Stay here" dismisses it', async () => {

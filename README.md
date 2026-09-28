@@ -6,6 +6,12 @@
   </a>
 </p>
 
+> **Trustblocks' fork.** This is [TrustBlocks](https://github.com/TrustBlocks)' fork of Accord Project's Template Playground, on the `trustblocks` branch (built from Accord's `webmcp-poc`, merging Accord's `main`). It runs a template's logic in **Clojure**, with Trustblocks' own clause runtime -- `trustblocks-logic.js`, built from [trustblocks-templates' `runtime/`](https://github.com/TrustBlocks/trustblocks-templates/blob/main/docs/runtime.md) -- in place of the TypeScript runtime, so a request gets exactly the answer it gets in Trustblocks, lifecycle and all. Its samples are Trustblocks' templates. For Accord's own templates and TypeScript logic, use [Accord's playground](https://playground.accordproject.org).
+>
+> - `trustblocks.json` pins the trustblocks-templates commit; `node scripts/sync-trustblocks.mjs [path]` brings in its runtime (`public/trustblocks-logic.js`, after `bb logic-bundle` there) and its templates as samples (`src/samples/trustblocks.generated.ts`).
+> - `.github/workflows/pages.yml` builds all of that from source and deploys to GitHub Pages.
+> - `PW_CHANNEL=chrome npx playwright test e2e/trustblocks.spec.ts` runs a pay request and the vendor form through the lifecycle in a browser.
+
 This repository hosts the Accord Project Template-Playground. Templates are resourced using the [Template-Engine](https://github.com/accordproject/template-engine), rich-text templates are defined in TemplateMark (either as markdown files, or JSON documents) and are then merged with JSON data to produce output documents.
 
 ## Accord Project Playground

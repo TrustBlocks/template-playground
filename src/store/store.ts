@@ -4,12 +4,17 @@ import { immer } from "zustand/middleware/immer";
 import { debounce } from "ts-debounce";
 import { ModelManager } from "@accordproject/concerto-core";
 import { TemplateMarkInterpreter } from "@accordproject/template-engine";
-import { TypeScriptCompilationContext } from "@accordproject/template-engine/lib/TypeScriptCompilationContext";
-import { SMART_LEGAL_CONTRACT_BASE64 } from "@accordproject/template-engine/lib/runtime/declarations";
 import { TemplateMarkTransformer } from "@accordproject/markdown-template";
 import { transform } from "@accordproject/markdown-transform";
 import { SAMPLES, Sample } from "../samples";
-import * as playground from "../samples/playground";
+/*
+ * The sample the playground opens with: Trustblocks' pay request -- logic,
+ * lifecycle and all -- or, failing that, the first sample.
+ */
+const DEFAULT_SAMPLE: Sample =
+  SAMPLES.find((s) => s.NAME === "Trustblocks · Street Resurfacing Pay Application") ?? SAMPLES[0];
+const sampleLifecycle = (sample: Sample | undefined): string =>
+  sample?.LIFECYCLE ? JSON.stringify(sample.LIFECYCLE, null, 2) : "";
 import { compress, decompress } from "../utils/compression/compression";
 // Import removed: compileLogicTs is now a no-op
 import {
@@ -47,6 +52,19 @@ export interface LogicExecutionResult {
   stage: "parse" | "run";
   durationMs: number;
   executedAt: string; // ISO timestamp
+}
+
+/** What trustblocks-logic.js's TrustblocksLogic.trigger answers -- see docs/runtime.md in trustblocks-templates. */
+interface TriggerResult {
+  ok: boolean;
+  response?: object;
+  state?: object;
+  transition?: { event: string; from?: string[]; to: string } | null;
+  certifiedAs?: { credential: string; authority: string } | null;
+  now?: string;
+  code?: string;
+  error?: string;
+  requires?: Array<{ credential: string; authority: string }>;
 }
 
 interface AppState {
@@ -163,6 +181,8 @@ interface AppState {
    * extracts and surfaces compilation diagnostic markers if it fails.
    */
   compileLogic: () => Promise<void>;
+  /** Resolves once the sandbox has loaded the logic runtime. */
+  whenSandboxReady: () => Promise<void>;
   /**
    * Builds an official Template object from the current in-memory string contents
    * (grammar, model, logic) using JSZip. This object is required by the engine for compilation.
@@ -213,6 +233,19 @@ interface AppState {
 
   /** The current request payload (JSON string) used as input for the next trigger. */
   requestJson: string;
+  /**
+   * The template's lifecycle (Trustblocks lifecycle.json), as JSON text, or
+   * "" for none. The runtime checks every trigger against it.
+   */
+  lifecycleJson: string;
+  setLifecycleJson: (json: string) => void;
+  /**
+   * When a trigger takes effect, as an ISO-8601 string -- the clause's
+   * `now`. "" means the current time. There is no clock inside a clause; the
+   * host gives it the time, and here the host is the person simulating.
+   */
+  simulateNow: string;
+  setSimulateNow: (iso: string) => void;
   setRequestJson: (json: string) => void;
 
   /**
@@ -235,6 +268,7 @@ export interface DecompressedData {
   data: string;
   agreementHtml: string;
   logicTs?: string;
+  lifecycleJson?: string;
 }
 
 const rebuildDeBounce = debounce(rebuild, 500);
@@ -357,13 +391,13 @@ const useAppStore = create<AppState>()(
         setActiveTab: (tab: "build" | "simulate") => set({ activeTab: tab }),
         backgroundColor: initialTheme.backgroundColor,
         textColor: initialTheme.textColor,
-        sampleName: playground.NAME,
-        templateMarkdown: playground.TEMPLATE,
-        editorValue: playground.TEMPLATE,
-        modelCto: playground.MODEL,
-        editorModelCto: playground.MODEL,
-        data: JSON.stringify(playground.DATA, null, 2),
-        editorAgreementData: JSON.stringify(playground.DATA, null, 2),
+        sampleName: DEFAULT_SAMPLE.NAME,
+        templateMarkdown: DEFAULT_SAMPLE.TEMPLATE,
+        editorValue: DEFAULT_SAMPLE.TEMPLATE,
+        modelCto: DEFAULT_SAMPLE.MODEL,
+        editorModelCto: DEFAULT_SAMPLE.MODEL,
+        data: JSON.stringify(DEFAULT_SAMPLE.DATA, null, 2),
+        editorAgreementData: JSON.stringify(DEFAULT_SAMPLE.DATA, null, 2),
         agreementHtml: "",
         isAIChatOpen: initialPanels.isAIChatOpen,
         error: undefined,
@@ -389,10 +423,12 @@ const useAppStore = create<AppState>()(
         showLineNumbers: getInitialLineNumbers(),
         isSettingsOpen: false,
         keyProtectionLevel: null,
+        // On unless turned off: running a template's logic is what this
+        // playground is for.
         isLogicFeatureEnabled:
           typeof window !== "undefined"
-            ? localStorage.getItem("isLogicFeatureEnabled") === "true"
-            : false,
+            ? localStorage.getItem("isLogicFeatureEnabled") !== "false"
+            : true,
         setLogicFeatureEnabled: (value: boolean) => {
           if (typeof window !== "undefined") {
             localStorage.setItem("isLogicFeatureEnabled", String(value));
@@ -401,16 +437,17 @@ const useAppStore = create<AppState>()(
         },
         isDesignV2Enabled:
           typeof window !== "undefined"
-            ? localStorage.getItem("isDesignV2Enabled") === "true"
-            : false,
+            ? localStorage.getItem("isDesignV2Enabled") !== "false"
+            : true,
         setDesignV2Enabled: (value: boolean) => {
           if (typeof window !== "undefined") {
             localStorage.setItem("isDesignV2Enabled", String(value));
           }
           set({ isDesignV2Enabled: value });
         },
-        logicTs: "",
-        editorLogicTs: "",
+        // Field names are upstream's; the logic is Clojure (see compileLogic).
+        logicTs: DEFAULT_SAMPLE.LOGIC ?? "",
+        editorLogicTs: DEFAULT_SAMPLE.LOGIC ?? "",
         compiledLogicJs: null,
         isCompiling: false,
         compilationErrors: [],
@@ -426,8 +463,14 @@ const useAppStore = create<AppState>()(
         executionHistory: [],
         clearExecutionHistory: () => set({ executionHistory: [] }),
 
-        requestJson: '{\n  "$class": "org.acme.counter@1.0.0.CounterRequest",\n  "increment": 1\n}',
+        requestJson: DEFAULT_SAMPLE.REQUEST
+          ? JSON.stringify(DEFAULT_SAMPLE.REQUEST, null, 2)
+          : '{\n  "$class": ""\n}',
         setRequestJson: (json: string) => set({ requestJson: json }),
+        lifecycleJson: sampleLifecycle(DEFAULT_SAMPLE),
+        setLifecycleJson: (json: string) => set({ lifecycleJson: json }),
+        simulateNow: "",
+        setSimulateNow: (iso: string) => set({ simulateNow: iso }),
 
         toggleModelCollapse: () =>
           set((state) => ({ isModelCollapsed: !state.isModelCollapsed })),
@@ -514,6 +557,11 @@ const useAppStore = create<AppState>()(
               });
             }
             await get().rebuild();
+            // Not awaited: the check waits for the sandbox, which the page
+            // renders only once init is done.
+            if (get().isLogicFeatureEnabled && get().logicTs.trim()) {
+              void get().compileLogic();
+            }
           }
         },
         loadSample: async (name: string) => {
@@ -521,8 +569,10 @@ const useAppStore = create<AppState>()(
           if (sample) {
             const state = get();
             const logicTs = sample.LOGIC ?? "";
-            const hasLogic = !!sample.LOGIC && state.isLogicFeatureEnabled;
-            const defaultRequest = '{\n  "$class": "org.acme.counter@1.0.0.CounterRequest",\n  "increment": 1\n}';
+            // A lifecycle alone runs too: the vendor form moves through its
+            // states with no clause of its own.
+            const hasLogic = !!(sample.LOGIC || sample.LIFECYCLE) && state.isLogicFeatureEnabled;
+            const defaultRequest = '{\n  "$class": ""\n}';
             const requestJson = sample.REQUEST ? JSON.stringify(sample.REQUEST, null, 2) : defaultRequest;
             set(() => ({
               sampleName: sample.NAME,
@@ -535,6 +585,7 @@ const useAppStore = create<AppState>()(
               data: JSON.stringify(sample.DATA, null, 2),
               editorAgreementData: JSON.stringify(sample.DATA, null, 2),
               requestJson,
+              lifecycleJson: sampleLifecycle(sample),
               // Reset logic state when switching samples
               logicTs,
               editorLogicTs: logicTs,
@@ -561,6 +612,13 @@ const useAppStore = create<AppState>()(
             });
 
             await get().rebuild();
+
+            // A sample's clause arrives written: check it at once, so
+            // Simulate is ready without an Apply & Compile. Not awaited --
+            // the check waits for the sandbox's runtime to load.
+            if (hasLogic && logicTs.trim()) {
+              void get().compileLogic();
+            }
 
             // Auto-trigger logic tour when a user opens a logic contract sample for the first time
             if (hasLogic && typeof window !== "undefined" && !localStorage.getItem("hasVisitedLogicTour")) {
@@ -651,12 +709,13 @@ const useAppStore = create<AppState>()(
             data: state.data,
             agreementHtml: state.agreementHtml,
             ...(state.logicTs?.trim() ? { logicTs: state.logicTs } : {}),
+            ...(state.lifecycleJson?.trim() ? { lifecycleJson: state.lifecycleJson } : {}),
           });
-          return `${window.location.origin}/#data=${compressedData}`;
+          return `${window.location.origin}${import.meta.env.BASE_URL}#data=${compressedData}`;
         },
         loadFromLink: async (compressedData: string) => {
           try {
-            const { templateMarkdown, modelCto, data, agreementHtml, logicTs } =
+            const { templateMarkdown, modelCto, data, agreementHtml, logicTs, lifecycleJson } =
               decompress(compressedData);
             if (!templateMarkdown || !modelCto || !data) {
               throw new Error("Invalid share link data");
@@ -673,6 +732,7 @@ const useAppStore = create<AppState>()(
               error: undefined,
               logicTs: logicTs || "",
               editorLogicTs: logicTs || "",
+              lifecycleJson: lifecycleJson || "",
               compiledLogicJs: null,
               compilationErrors: [],
               isCompiling: false,
@@ -805,143 +865,59 @@ const useAppStore = create<AppState>()(
         },
 
         compileLogic: async () => {
+          /*
+           * The logic is Clojure, run by Trustblocks' clause runtime
+           * (trustblocks-logic.js, from trustblocks-templates' runtime/) in
+           * the sandbox worker. There is nothing to compile: "compiling" is
+           * the runtime's own check -- the clause is built without being run,
+           * and anything outside the vocabulary is refused before any of it
+           * executes. compiledLogicJs then holds the checked source.
+           */
           set({
             isCompiling: true,
             compilationErrors: [],
             compiledLogicJs: null,
           });
+          const { logicTs } = get();
+          if (!logicTs.trim()) {
+            set({ isCompiling: false });
+            return;
+          }
           try {
-            const state = get();
-            if (!state.logicTs || !state.modelCto) {
-              set({ isCompiling: false, compilationErrors: [] });
-              return;
-            }
-
-            const { TemplateArchiveProcessor } =
-              await import("@accordproject/template-engine");
-
-            /*
-             * Always rebuild the Template object from the latest in-memory sources
-             * to ensure the compiler has the most up-to-date grammar and model.
-             */
-            await get().buildTemplateFromMemory();
-
-            const templateToCompile = get().templateObject;
-            if (!templateToCompile) {
-              set({
-                isCompiling: false,
-                compilationErrors: [
-                  {
-                    message:
-                      "Failed to initialize Template object from memory.",
-                    line: 0,
-                    column: 0,
-                  },
-                ],
-              });
-              return;
-            }
-
-            const processor = new TemplateArchiveProcessor(templateToCompile);
-            const compiledCode = await processor.compileLogic();
-            const result = compiledCode["logic/logic.ts"];
-
-            // Filter out bogus error 2391 caused by syntax errors in the engine's own shim (TemplateLogic.init)
-            const actualErrors = result.errors
-              ? result.errors.filter((e: any) => e.code !== 2391)
-              : [];
-
-            if (actualErrors.length > 0) {
-              // Calculate the line offset of the user's logic code dynamically
-              let lineOffset = 0;
-              try {
-                if (
-                  templateToCompile &&
-                  typeof templateToCompile.getModelManager === "function" &&
-                  typeof templateToCompile.getTemplateModel === "function"
-                ) {
-                  const templateModel = templateToCompile.getTemplateModel();
-                  const fqn = templateModel && typeof templateModel.getFullyQualifiedName === "function"
-                    ? templateModel.getFullyQualifiedName()
-                    : undefined;
-                  const contextStr = new TypeScriptCompilationContext(
-                    templateToCompile.getModelManager(),
-                    fqn,
-                  ).getCompilationContext();
-                  const declarationsStr = atob(SMART_LEGAL_CONTRACT_BASE64);
-                  const prependedText = `\n${contextStr}\n${declarationsStr}\n                `;
-                  lineOffset = prependedText.split("\n").length - 1;
-                }
-              } catch (e) {
-                console.error("Failed to calculate compilation line offset", e);
-              }
-
+            await get().whenSandboxReady();
+            const why = (await get().executeInSandbox("", "check", [logicTs])) as string | null;
+            if (why) {
               set({
                 isCompiling: false,
                 isProblemPanelVisible: true,
-                compilationErrors: actualErrors.map((e: any) => {
-                  const errorLine = e.line !== undefined ? e.line - lineOffset : undefined;
-                  return {
-                    message: e.renderedMessage || e.text,
-                    line: errorLine !== undefined ? Math.max(0, errorLine) + 1 : undefined,
-                    column: e.character !== undefined ? e.character + 1 : undefined,
-                    length: e.length,
-                  };
-                }),
+                compilationErrors: [{ message: `Refused by the clause vocabulary: ${why}` }],
               });
             } else {
-              let code = result.code;
-
-              /*
-               * Strip export keywords so we can evaluate natively via new Function().
-               * This handles: export class Foo, export default class Foo, export default Foo.
-               */
-              code = code.replace(/^export\s+class/gm, "class");
-              code = code.replace(/^export\s+default/gm, "");
-
-              /*
-               * Append a return statement so new Function() yields the class constructor.
-               * Guard: if no class extending TemplateLogic is found, the compiled code
-               * is malformed — report a compilation error instead of silently producing
-               * code that would cause `new undefined()` at runtime.
-               */
-              const match = code.match(
-                /class\s+(\w+)\s+extends\s+TemplateLogic/,
-              );
-              if (!match) {
-                set({
-                  isCompiling: false,
-                  isProblemPanelVisible: true,
-                  compilationErrors: [
-                    {
-                      message:
-                        "Compiled output does not contain a class extending TemplateLogic. Ensure your logic class extends TemplateLogic.",
-                    },
-                  ],
-                });
-                return;
-              }
-              code += `\nreturn ${match[1]};\n`;
-
-              set({
-                isCompiling: false,
-                compiledLogicJs: code,
-                compilationErrors: [],
-              });
+              set({ isCompiling: false, compiledLogicJs: logicTs, compilationErrors: [] });
             }
           } catch (error: unknown) {
             set({
               isCompiling: false,
               isProblemPanelVisible: true,
               compilationErrors: [
-                {
-                  message:
-                    error instanceof Error ? error.message : String(error),
-                },
+                { message: error instanceof Error ? error.message : String(error) },
               ],
             });
           }
         },
+
+        whenSandboxReady: () =>
+          new Promise<void>((resolve, reject) => {
+            const started = Date.now();
+            const poll = () => {
+              if (get().isSandboxReady) return resolve();
+              if (Date.now() - started > 15000) {
+                return reject(new Error("The logic runtime did not load (trustblocks-logic.js)"));
+              }
+              setTimeout(poll, 50);
+            };
+            poll();
+          }),
 
         setSandboxRef: (iframe: HTMLIFrameElement | null) => {
           set({ sandboxIframe: iframe });
@@ -1038,8 +1014,14 @@ const useAppStore = create<AppState>()(
         },
 
         initContract: async () => {
-          const { compiledLogicJs, data } = get();
-          if (!compiledLogicJs) {
+          /*
+           * A Trustblocks document has no init: it starts with no state, before
+           * its lifecycle has begun, and its first event (a pay request
+           * received) begins it. "Init" starts a fresh run there, and says what
+           * can happen first.
+           */
+          const { compiledLogicJs, lifecycleJson, data } = get();
+          if (!compiledLogicJs && !lifecycleJson.trim()) {
             return;
           }
 
@@ -1059,22 +1041,23 @@ const useAppStore = create<AppState>()(
           let parsedData: object = {};
           try {
             parsedData = JSON.parse(data) as object;
-            const output = await get().executeInSandbox(compiledLogicJs, 'init', [parsedData]) as { state?: unknown; events?: unknown[] };
-            const events = Array.isArray(output.events) ? (output.events as object[]) : [];
-
+            const lifecycle = lifecycleJson.trim() ? (JSON.parse(lifecycleJson) as object) : null;
+            const nextSteps = lifecycle
+              ? await get().executeInSandbox("", "nextSteps", [lifecycle, null])
+              : [];
             set({
-              executionState: output.state ? JSON.stringify(output.state, null, 2) : '',
-              executionEvents: output.events ? JSON.stringify(output.events, null, 2) : '[]',
-              executionResponse: '',
-              // A new init starts a new run history
+              executionState: "{}",
+              executionEvents: "[]",
+              executionResponse: "",
+              // A new start begins a new run history
               executionHistory: [run({
                 request: parsedData,
-                response: { state: output.state ?? null, events },
-                stateAfter: (output.state as object | undefined) ?? null,
-                events,
+                response: { state: null, nextSteps },
+                stateAfter: {},
+                events: [],
                 error: null,
               })],
-              compilationErrors: []
+              compilationErrors: [],
             });
           } catch (err: unknown) {
             const message = formatError(err);
@@ -1087,8 +1070,9 @@ const useAppStore = create<AppState>()(
         },
 
         triggerContract: async () => {
-          const { compiledLogicJs, data, requestJson, executionState, executeInSandbox } = get();
-          if (!compiledLogicJs) return;
+          const { compiledLogicJs, lifecycleJson, modelCto, simulateNow, data, requestJson,
+                  executionState, executeInSandbox } = get();
+          if (!compiledLogicJs && !lifecycleJson.trim()) return;
 
           if (!executionState) {
             set({
@@ -1125,8 +1109,38 @@ const useAppStore = create<AppState>()(
               throw parseErr;
             }
 
-            const output = (await executeInSandbox(compiledLogicJs, 'trigger', [parsedData, parsedRequest, parsedState])) as { result?: unknown, state?: unknown, events?: unknown[] };
-            const events = Array.isArray(output.events) ? (output.events as object[]) : [];
+            /*
+             * One step, exactly as Trustblocks takes it (trustblocks-templates'
+             * com.trustblocks.runtime/step): the lifecycle decides whether the
+             * event may happen, the clause what follows. The certification is
+             * simulated -- the first the transition accepts -- and `now` is
+             * the time set to simulate, or the current time.
+             */
+            const step = (await executeInSandbox("", "trigger", [{
+              logic: compiledLogicJs ?? "",
+              lifecycle: lifecycleJson.trim() ? (JSON.parse(lifecycleJson) as object) : null,
+              model: modelCto,
+              data: parsedData,
+              request: parsedRequest,
+              state: parsedState,
+              ...(simulateNow ? { now: simulateNow } : {}),
+            }])) as TriggerResult;
+            if (!step.ok) {
+              throw new Error(`${String(step.error)} (${String(step.code)})`);
+            }
+            // Shown as the run's response: the clause's answer, and how the
+            // step was taken.
+            const output = {
+              result: {
+                response: step.response,
+                transition: step.transition,
+                certifiedAs: step.certifiedAs,
+                now: step.now,
+              },
+              state: step.state,
+              events: [] as unknown[],
+            };
+            const events: object[] = [];
 
             /*
              * Extract and store execution artifacts.
@@ -1141,7 +1155,7 @@ const useAppStore = create<AppState>()(
                 request: parsedRequest,
                 response: (output.result as object | undefined) ?? null,
                 stateBefore: parsedState,
-                stateAfter: (output.state as object | undefined) ?? parsedState,
+                stateAfter: output.state ?? parsedState,
                 events,
                 error: null,
                 stage: "run",
@@ -1172,6 +1186,13 @@ const useAppStore = create<AppState>()(
 );
 
 export default useAppStore;
+
+// For the e2e tests (e2e/trustblocks.spec.ts), in the development build only:
+// they set a request as a whole, which Monaco's editor makes hard to do by
+// keyboard.
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as { __playgroundStore?: typeof useAppStore }).__playgroundStore = useAppStore;
+}
 
 function formatError(error: unknown): string {
   console.error(error);

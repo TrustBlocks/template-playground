@@ -368,7 +368,7 @@ function Navbar() {
           className="flex items-center"
         >
           <Image
-            src={screens.lg ? "/logo.png" : "/accord_logo.png"}
+            src={`${import.meta.env.BASE_URL}${screens.lg ? "logo.png" : "accord_logo.png"}`}
             alt="Template Playground"
             className={`h-6.5 ${screens.lg ? "pr-2 max-w-[184.17px]" : "pr-0.5 max-w-[36.67px]"}`}
           />

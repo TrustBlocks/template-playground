@@ -20,7 +20,7 @@ export const STEPS = [
   { id: 1, key: "template", icon: "1", label: "Template", meta: "pick a starting point" },
   { id: 2, key: "text", icon: "2", label: "Text", meta: "text.md" },
   { id: 3, key: "modelData", icon: "3", label: "Data", meta: "model.cto · data.json" },
-  { id: 4, key: "logic", icon: "4", label: "Logic", meta: "logic.ts" },
+  { id: 4, key: "logic", icon: "4", label: "Logic", meta: "clause.clj" },
   { id: 5, key: "simulate", icon: "5", label: "Simulate", meta: "try it out" },
   { id: 6, key: "deploy", icon: "6", label: "Deploy", meta: "publish & share" },
 ] as const;

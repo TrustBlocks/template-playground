@@ -28,3 +28,6 @@ dist-ssr
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Built from trustblocks-templates by scripts/sync-trustblocks.mjs
+public/trustblocks-logic.js

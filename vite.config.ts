@@ -5,6 +5,9 @@ import nodePolyfills from "vite-plugin-node-stdlib-browser";
 import { visualizer } from "rollup-plugin-visualizer";
 // https://vitejs.dev/config/
 const viteConfig = defineViteConfig({
+  // "/" locally; on GitHub Pages the site lives under the repository's path,
+  // e.g. PLAYGROUND_BASE=/template-playground/ (.github/workflows/pages.yml).
+  base: process.env.PLAYGROUND_BASE ?? "/",
   plugins: [nodePolyfills(), react(), visualizer({
     emitFile: true,
     filename: "stats.html",

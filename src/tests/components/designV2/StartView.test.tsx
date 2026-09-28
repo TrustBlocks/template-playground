@@ -22,10 +22,10 @@ describe('START_SAMPLES', () => {
     }
   });
 
-  it('every card points at a sample that ships logic and a default request', () => {
+  it('every card points at a sample that runs -- a clause, a lifecycle or both -- with a default request', () => {
     for (const card of START_SAMPLES) {
       const sample = SAMPLES.find((s) => s.NAME === card.sampleName)!;
-      expect(sample.LOGIC, card.name).toBeTruthy();
+      expect(sample.LOGIC || sample.LIFECYCLE, card.name).toBeTruthy();
       expect(sample.REQUEST, card.name).toBeTruthy();
     }
   });

@@ -35,7 +35,7 @@ const CustomFooter: React.FC = () => {
           <Space direction="vertical" size="middle">
             <Link href="https://www.accordproject.org" target="_blank">
               <Image
-                src="/logo.png"
+                src={`${import.meta.env.BASE_URL}logo.png`}
                 alt="Template Playground"
                 preview={false}
                 style={{ height: "36px", maxWidth: "100%" }}

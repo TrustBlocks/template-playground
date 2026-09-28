@@ -12,6 +12,9 @@ describe("useAppStore - Sandbox State", () => {
       isSandboxReady: false,
       isExecuting: false,
       executionId: 0,
+      // The default sample carries a lifecycle; these tests set their own.
+      lifecycleJson: "",
+      simulateNow: "",
     });
   });
 
@@ -197,14 +200,13 @@ describe("useAppStore - Sandbox State", () => {
       expect(useAppStore.getState().executionState).toBe("");
     });
 
-    it("should populate executionState and executionEvents on success", async () => {
-      const executeInSandboxMock = vi.fn().mockResolvedValue({
-        state: { $class: "test", id: 123 },
-        events: [{ $class: "event", name: "test_event" }]
-      });
+    it("should start with no state, and ask the runtime what can happen first", async () => {
+      const lifecycle = { stateType: "S", transitions: [{ event: "Received", from: [], to: "RECEIVED", requires: [] }] };
+      const executeInSandboxMock = vi.fn().mockResolvedValue([{ event: "Received", to: "RECEIVED", requires: [] }]);
 
       useAppStore.setState({
         compiledLogicJs: "some_code",
+        lifecycleJson: JSON.stringify(lifecycle),
         data: '{"owner": "Alice"}',
         executeInSandbox: executeInSandboxMock
       });
@@ -212,10 +214,20 @@ describe("useAppStore - Sandbox State", () => {
       await useAppStore.getState().initContract();
 
       const state = useAppStore.getState();
-      expect(executeInSandboxMock).toHaveBeenCalledWith("some_code", "init", [{ owner: "Alice" }]);
-      expect(state.executionState).toContain('"id": 123');
-      expect(state.executionEvents).toContain('"name": "test_event"');
+      expect(executeInSandboxMock).toHaveBeenCalledWith("", "nextSteps", [lifecycle, null]);
+      expect(state.executionState).toBe("{}");
+      expect(state.executionEvents).toBe("[]");
       expect(state.compilationErrors).toEqual([]);
+    });
+
+    it("should not call the runtime for a clause with no lifecycle", async () => {
+      const executeInSandboxMock = vi.fn();
+      useAppStore.setState({ compiledLogicJs: "some_code", data: "{}", executeInSandbox: executeInSandboxMock });
+
+      await useAppStore.getState().initContract();
+
+      expect(executeInSandboxMock).not.toHaveBeenCalled();
+      expect(useAppStore.getState().executionState).toBe("{}");
     });
 
     it("should catch errors, format them, and open the problems panel", async () => {
@@ -223,6 +235,7 @@ describe("useAppStore - Sandbox State", () => {
 
       useAppStore.setState({
         compiledLogicJs: "some_code",
+        lifecycleJson: '{"transitions": []}',
         data: '{"owner": "Alice"}',
         executeInSandbox: executeInSandboxMock,
         compilationErrors: [],
@@ -259,15 +272,19 @@ describe("useAppStore - Sandbox State", () => {
       expect(state.isProblemPanelVisible).toBe(true);
     });
 
-    it("should successfully trigger the contract and update the executionResponse", async () => {
+    it("should take one step through the runtime and update the executionResponse", async () => {
       const executeInSandboxMock = vi.fn().mockResolvedValue({
-        result: { $class: "test_response", value: 42 },
+        ok: true,
+        response: { $class: "test_response", value: 42 },
         state: { $class: "test_state", count: 2 },
-        events: []
+        transition: null,
+        certifiedAs: null,
+        now: "2026-07-24T15:00:00.000Z",
       });
 
       useAppStore.setState({
         compiledLogicJs: "some_code",
+        modelCto: "namespace test@1.0.0",
         data: '{"owner": "Alice"}',
         requestJson: '{"increment": 1}',
         executionState: '{"count": 1}',
@@ -277,15 +294,35 @@ describe("useAppStore - Sandbox State", () => {
       await useAppStore.getState().triggerContract();
 
       const state = useAppStore.getState();
-      expect(executeInSandboxMock).toHaveBeenCalledWith("some_code", "trigger", [
-        { owner: "Alice" },
-        { increment: 1 },
-        { count: 1 }
-      ]);
+      expect(executeInSandboxMock).toHaveBeenCalledWith("", "trigger", [{
+        logic: "some_code",
+        lifecycle: null,
+        model: "namespace test@1.0.0",
+        data: { owner: "Alice" },
+        request: { increment: 1 },
+        state: { count: 1 },
+      }]);
       expect(state.executionResponse).toContain('"value": 42');
+      expect(state.executionResponse).toContain('"now": "2026-07-24T15:00:00.000Z"');
       expect(state.executionState).toContain('"count": 2');
       expect(state.executionEvents).toBe("[]");
       expect(state.compilationErrors).toEqual([]);
+    });
+
+    it("should report a refusal with its message and code", async () => {
+      useAppStore.setState({
+        compiledLogicJs: "some_code",
+        data: "{}",
+        requestJson: "{}",
+        executionState: "{}",
+        executeInSandbox: vi.fn().mockResolvedValue({ ok: false, code: "clause-refused", error: "Not approved" }),
+        compilationErrors: [],
+      });
+
+      await useAppStore.getState().triggerContract();
+
+      expect(useAppStore.getState().compilationErrors[0].message)
+        .toContain("Execution Error: Error: Not approved (clause-refused)");
     });
 
     it("should handle runtime errors in trigger pipeline", async () => {

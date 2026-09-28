@@ -6,7 +6,8 @@ import { HELP_RAIL, MODEL_DATA, START, START_SAMPLES, sampleNameFor } from '../.
 import useAppStore from '../../../store/store';
 import useDesignV2Store from '../../../store/designV2Store';
 import { SAMPLES } from '../../../samples';
-import * as counter from '../../../samples/counterLogic';
+// The sample these tests load: Trustblocks' pay request, the first card.
+const counter = SAMPLES.find((s) => s.NAME === 'Trustblocks · Street Resurfacing Pay Application')!;
 import { NAME as BLANK_SAMPLE_NAME } from '../../../samples/blank';
 
 /*
